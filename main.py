@@ -4,12 +4,11 @@ from sklearn.neighbors import NearestNeighbors
 from collections import defaultdict
 pd.options.mode.chained_assignment = None  # default='warn'
 import streamlit as st
+st.set_page_config(initial_sidebar_state='collapsed')
 
 #st.write('Hello World')
 
 # SETTING UP DATABASE FOR USE
-
-
 
 # loading csv file with movies
 movies_db = pd.read_csv('tmdb_5000_movies.csv')
@@ -33,11 +32,8 @@ df = df[['title', 'genre', 'vote_average']]
 df = df.rename(columns={'vote_average':'rating'})
 
 
-# setting up a dictionary to hold each movies information
+# setting up a dictionary to hold each movies genres as well as rating
 movie_dict = {}
-
-# for each movie want to store each genre and also its average rating
-# will store in a dictionary where the last index in the list is the vote_average so can index using movie_dict[title][-1]
 
 
 # use iterrows to get specific information about each movie (cant index the row otherwise)
@@ -70,7 +66,6 @@ for i,row in df.iterrows():
 # itially user will have to sign in and then will retreive their seen movies as well as their favorite genres
 
 
-st.write()
 # create a set to hold the titles of movies that the user has seen (so they arent recommended again)
 seen_movies = set()
 
@@ -92,57 +87,79 @@ def update_seen_movies(title: str) -> None:
     
     return None
 
-# test out the function
-#print(movie_dict)
-#update_seen_movies('Avatar')
-#update_seen_movies('Spectre')
-#print(favorite_genres)
 
-
-#If we give 5 recommended movies to the user perhaps, make the first three strongly matched on the 
-
-
-
+# function to recommend n movies to the user based off of seen movies and fav genres
 def recommend_movie(seen_movies: set, favorite_genres: dict, movie_dict: dict, top_n: int) -> list:
     
     # sort the users top genres by using the number of genres and reversing it. And getting the top 3 genres
     # the lambda function is getting the pair of ('genre',count) and using the pair at index 1 to sort
     sorted_genres = sorted(favorite_genres.items(), key=lambda x: x[1], reverse=True)[:3]
     
-    # getting the top 3 preferred genres
+    # getting all of the users preferred genres in order
     preferred_genres = [genre for genre,count in sorted_genres]
     
     
-    # store the recommendations
+    # list to store recommendations
     recommendations = []
+    
+    # looping through all movie titles and their detials
     for movie,details in movie_dict.items():
+        
+        # check if movie hasnt already been seen
         if movie not in seen_movies:
-            # make sure movie hasnt been seen
+
             # get the genres and rating of the movie
             movie_genres = details[:-1]
             movie_rating = details[-1]
             
-            
-            # see if this movie matches the users preferred genres
-            # use a point system to see how well of a match it actually is
+            # sum the number of each genre that is in the preferred genre list thats also in the movie list
             genre_overlap = sum(1 for genre in preferred_genres if genre in movie_genres)
             
+            # check if they have any matching genres and if so append movie to the list (game_overlap is so we can see how strong of a match it is)
             if genre_overlap > 0:
                 recommendations.append((movie, movie_rating, genre_overlap, movie_genres))
     
     # sort the reccomendations based on the genre overlap firstly and then secondly rating
     recommendations = sorted(recommendations, key=lambda x: (x[2], x[1]), reverse=True)
     
-    # return the top n recommendations
-    return recommendations[:top_n]
+    # get the top n recommendations 
+    top_recommendations = recommendations[:top_n]
+    
+    # modify the data to get rid of the genre_overlap section
+    modified_recommendations = [(title, rating, genres) for title,rating,_,genres in top_recommendations]
+    
+    # turn it into a dataframe to display onto the screen
+    df = pd.DataFrame(modified_recommendations, columns=['Title','Rating','Genres'])
+    
+    # convert the genres list to a string for better readability WILL DO LATER
+    
+    # return the resulting dataframe
+    return df
 
-#print(recommend_movie(seen_movies,favorite_genres,movie_dict,5))
-            
 
 
-# main function for GUI usage
-def main():
-    st.title("Movie Recommendations")
+# give title and heading to users
+st.title("Movie Recommendations")
+st.write('### Input Data')
 
-if __name__ == "__main__":
-    main()
+# set up two columns for the inputs
+col1, col2 = st.columns(2)
+
+# get the user to choose the genres they enjoy
+genres = col1.multiselect("Genres", ['Action', 'Fantasy','Science Fiction','Crime','Thriller','Action'])
+
+# take genre list and place them into a dictionary (this is so recommendation algorithm still works properly)
+genre_dict = dict()
+for genre in genres:
+    genre_dict[genre] = 1
+    
+
+# let user choose the number of recommendations they want
+recommendation_amount = col2.number_input('Choose the number of recommendations', min_value=1, max_value=10)
+
+
+# if the user presses the get recommendation button, display the database of recommendations
+if st.button('Get recommendations'):
+    movie_dataframe = recommend_movie(seen_movies,genre_dict,movie_dict,recommendation_amount)
+    st.dataframe(movie_dataframe)
+    
