@@ -24,7 +24,12 @@ with st.form(key='Login Form'):
         
         # check if its valid
         if result:
+            # storing the username
+            st.session_state['username'] = username
+            
             st.success('Login Successful!')
             switch_page('main')
         else:
             st.error('Invalid username or password')
+
+# send the username and password to the main file

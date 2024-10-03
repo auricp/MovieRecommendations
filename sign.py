@@ -23,7 +23,6 @@ with st.form(key='Registration Form'):
 
         conn.commit()
         conn.close()
-        st.success('User has been added')
         
         # now go to login page
         switch_page('login')

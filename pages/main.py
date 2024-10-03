@@ -1,14 +1,37 @@
 import pandas as pd
 import json
-from sklearn.neighbors import NearestNeighbors
-from collections import defaultdict
-pd.options.mode.chained_assignment = None  # default='warn'
 import streamlit as st
-st.set_page_config(initial_sidebar_state='collapsed')
+import sqlite3
 
-#st.write('Hello World')
+
+# config
+pd.options.mode.chained_assignment = None  # default='warn'
+#st.set_page_config(initial_sidebar_state='collapsed')
 
 # SETTING UP DATABASE FOR USE
+
+# retreiving the username from session state
+if 'username' in st.session_state:
+    username = st.session_state['username']
+    
+if 'selected_movies' not in st.session_state:
+    st.session_state.selected_movies = []
+    
+# set up sqlite database for the username and their genres
+conn = sqlite3.connect('movies.db',check_same_thread=False)
+cursor = conn.cursor()
+
+cursor.execute(
+    """
+    CREATE TABLE IF NOT EXISTS movies (
+        ID INTEGER PRIMARY KEY AUTOINCREMENT,
+        USERNAME TEXT(50), MOVIE_TITLE TEXT(50),
+        UNIQUE(USERNAME, movie_title)
+        )
+    """
+)
+conn.commit()
+
 
 # loading csv file with movies
 movies_db = pd.read_csv('tmdb_5000_movies.csv')
@@ -34,12 +57,13 @@ df = df.rename(columns={'vote_average':'rating'})
 
 # setting up a dictionary to hold each movies genres as well as rating
 movie_dict = {}
-
+movie_names = []
 
 # use iterrows to get specific information about each movie (cant index the row otherwise)
 for i,row in df.iterrows():
     
     current_movie_title = row['title']
+    movie_names.append(row['title'])
     
     # first store all of the genres in the dict
     movie_dict[current_movie_title] = row['genre']
@@ -64,10 +88,9 @@ for i,row in df.iterrows():
 
 
 # itially user will have to sign in and then will retreive their seen movies as well as their favorite genres
-
+# get all movies from the database that the user has seen
 
 # create a set to hold the titles of movies that the user has seen (so they arent recommended again)
-seen_movies = set()
 
 # create a dictionary that keeps each genre and the amount of movies the user has seen with that genre
 favorite_genres = dict()
@@ -140,22 +163,47 @@ def recommend_movie(seen_movies: set, favorite_genres: dict, movie_dict: dict, t
 
 # give title and heading to users
 st.title("Movie Recommendations")
-st.write('### Input Data')
+st.write('### Input Info')
 
+def clear_multi():
+    st.session_state.multiselect = []
+    return
+# NEW TO POPULATE DATABASE WITH MOVIE NAMES
+    
+if 'seen_movies' not in st.session_state:
+    st.session_state.seen_movies = set()
+    
+def new_movie_list(movie_names, seen_movies):
+    return [movie for movie in movie_names if movie not in seen_movies]
+    
+
+#selected_movies = st.multiselect('Select new movies you have seen', options=[movie for movie in movie_names if movie not in st.session_state.seen_movies],key='multiselect')
+selected_movies = st.multiselect('Select new movies you have seen', options=[movie for movie in movie_names if movie not in st.session_state.seen_movies],key='multiselect')
+
+if st.button('update'):
+    for movie in selected_movies:
+        if movie not in st.session_state.seen_movies:
+            print(movie)
+            cursor.execute("INSERT INTO movies (USERNAME, MOVIE_TITLE) VALUES (?,?)", (username,movie))
+            conn.commit()
+            st.session_state.seen_movies.add(movie)
+
+conn.close()
+
+
+
+st.markdown('***')
 # set up two columns for the inputs
-col1, col2 = st.columns(2)
-
-# get the user to choose the genres they enjoy
-genres = col1.multiselect("Genres", ['Action', 'Fantasy','Science Fiction','Crime','Thriller','Action'])
+#col1, col2 = st.columns(2)
 
 # take genre list and place them into a dictionary (this is so recommendation algorithm still works properly)
 genre_dict = dict()
-for genre in genres:
-    genre_dict[genre] = 1
+
     
 
 # let user choose the number of recommendations they want
-recommendation_amount = col2.number_input('Choose the number of recommendations', min_value=1, max_value=10)
+#recommendation_amount = col2.number_input('Choose the number of recommendations', min_value=1, max_value=10)
+recommendation_amount = st.number_input('Choose the number of recommendations', min_value=1, max_value=10)
 
 
 # if the user presses the get recommendation button, display the database of recommendations
