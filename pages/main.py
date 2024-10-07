@@ -8,15 +8,22 @@ import sqlite3
 pd.options.mode.chained_assignment = None  # default='warn'
 #st.set_page_config(initial_sidebar_state='collapsed')
 
+#
+#
 # SETTING UP DATABASE FOR USE
+#
+#
+
 
 # retreiving the username from session state
 if 'username' in st.session_state:
     username = st.session_state['username']
-    
+
+# set up selected movies session state variable
 if 'selected_movies' not in st.session_state:
     st.session_state.selected_movies = []
-    
+
+
 # set up sqlite database for the username and their genres
 conn = sqlite3.connect('movies.db',check_same_thread=False)
 cursor = conn.cursor()
@@ -33,20 +40,18 @@ cursor.execute(
 conn.commit()
 
 
+
 # loading csv file with movies
 movies_db = pd.read_csv('tmdb_5000_movies.csv')
 
-
 # parse the database to be only the title, genres, and vote avg of the movies
 df = movies_db[['title','genres','vote_average']]
-
 
 # json extraction to get genre names from genres list
 df.loc[:, 'genre'] = df['genres'].apply(lambda x: [genre['name'] for genre in json.loads(x)])
 
 # getting rid of the genres column
 df = df.drop('genres', axis=1)
-
 
 # reformatting the database so it is easier to view
 df = df[['title', 'genre', 'vote_average']]
@@ -55,9 +60,10 @@ df = df[['title', 'genre', 'vote_average']]
 df = df.rename(columns={'vote_average':'rating'})
 
 
-# setting up a dictionary to hold each movies genres as well as rating
+# setting up a dictionary to hold each movies genres and rating as well as list with all movie names
 movie_dict = {}
 movie_names = []
+
 
 # use iterrows to get specific information about each movie (cant index the row otherwise)
 for i,row in df.iterrows():
@@ -72,44 +78,29 @@ for i,row in df.iterrows():
     movie_dict[current_movie_title].append(row['rating'])
 
 
-
-
+#
+#
 # IMPLEMENTING RECOMMENDATION ALGORITHM
+#
+#
 
-#RECOMMENDATION ALGO IDEA
-
-#- keep track of what movies the user has seen (can use a new dictionary or even just a list and can then index the dictionary)
-#- based off of the movies they have seen should take their top 3 genres and recommend movies that have those genres (most first)
-#- If there is a tie, take the movie with the highest rating
-#- make sure we dont recommend a movie they have already seen
-
-
-# will need to use a database to hold each users seen movies and favorite genres. Will use SQLite
-
-
-# itially user will have to sign in and then will retreive their seen movies as well as their favorite genres
-# get all movies from the database that the user has seen
-
-# create a set to hold the titles of movies that the user has seen (so they arent recommended again)
-
-# create a dictionary that keeps each genre and the amount of movies the user has seen with that genre
-favorite_genres = dict()
-
-
-# function that updates the seen_movies set and favorite_genres dict. Takes in a string of the movie title
-def update_seen_movies(title: str) -> None:
+# function that gets the seen movies from the database and updates the fav genres
+def get_movies_update_genres() -> None:
     
-    # add the movie to the seen_movies set
-    seen_movies.add(title)
+    # get all movies with current username
+    cursor.execute("SELECT MOVIE_TITLE FROM movies WHERE USERNAME = ?", (username,))
+    seen = cursor.fetchall()
     
-    # get all genres for the current title (the indexing ensures we dont get the last element which is the rating)
-    for genre in movie_dict[title][:-1]:
-        
-        # increment the count of the current genre if it exists, if not set it to 0 and then increment
-        favorite_genres[genre] = favorite_genres.get(genre, 0) + 1
+    # initializing seen_movies and favorite_genres
+    st.session_state.seen_movies = set([movie[0] for movie in seen])  
+    st.session_state.favorite_genres = dict()
+
+    # populating favorite_genres
+    for title in st.session_state.seen_movies:
+        for genre in movie_dict[title][:-1]:
+            st.session_state.favorite_genres[genre] = st.session_state.favorite_genres.get(genre, 0) + 1
     
     return None
-
 
 # function to recommend n movies to the user based off of seen movies and fav genres
 def recommend_movie(seen_movies: set, favorite_genres: dict, movie_dict: dict, top_n: int) -> list:
@@ -121,15 +112,12 @@ def recommend_movie(seen_movies: set, favorite_genres: dict, movie_dict: dict, t
     # getting all of the users preferred genres in order
     preferred_genres = [genre for genre,count in sorted_genres]
     
-    
     # list to store recommendations
     recommendations = []
     
     # looping through all movie titles and their detials
     for movie,details in movie_dict.items():
-        
-        # check if movie hasnt already been seen
-        if movie not in seen_movies:
+        if movie not in st.session_state.seen_movies:
 
             # get the genres and rating of the movie
             movie_genres = details[:-1]
@@ -153,61 +141,54 @@ def recommend_movie(seen_movies: set, favorite_genres: dict, movie_dict: dict, t
     
     # turn it into a dataframe to display onto the screen
     df = pd.DataFrame(modified_recommendations, columns=['Title','Rating','Genres'])
-    
-    # convert the genres list to a string for better readability WILL DO LATER
-    
+        
     # return the resulting dataframe
     return df
 
+
+#
+#
+# RUNTIME FUNTIONALITY
+#
+#
 
 
 # give title and heading to users
 st.title("Movie Recommendations")
 st.write('### Input Info')
 
-def clear_multi():
-    st.session_state.multiselect = []
-    return
-# NEW TO POPULATE DATABASE WITH MOVIE NAMES
-    
-if 'seen_movies' not in st.session_state:
-    st.session_state.seen_movies = set()
-    
-def new_movie_list(movie_names, seen_movies):
-    return [movie for movie in movie_names if movie not in seen_movies]
-    
 
-#selected_movies = st.multiselect('Select new movies you have seen', options=[movie for movie in movie_names if movie not in st.session_state.seen_movies],key='multiselect')
-selected_movies = st.multiselect('Select new movies you have seen', options=[movie for movie in movie_names if movie not in st.session_state.seen_movies],key='multiselect')
+# initializing seen_movies and favorite_genres after user signs in
+if 'seen_movies' not in st.session_state and 'favorite_genres' not in st.session_state:
+    get_movies_update_genres()
 
+
+# populating the multiselect for movies
+selected_movies = st.multiselect('Select new movies you have seen', options=[movie for movie in movie_names if movie not in st.session_state.seen_movies])
+
+# updating database, seen_movies, and favorite_genres when user clicks update button
 if st.button('update'):
     for movie in selected_movies:
         if movie not in st.session_state.seen_movies:
-            print(movie)
             cursor.execute("INSERT INTO movies (USERNAME, MOVIE_TITLE) VALUES (?,?)", (username,movie))
             conn.commit()
             st.session_state.seen_movies.add(movie)
+            
+            for genre in movie_dict[movie][:-1]:
+                st.session_state.favorite_genres[genre] = st.session_state.favorite_genres.get(genre,0) + 1
 
+# closing the database connection
 conn.close()
 
-
-
+# adding space
 st.markdown('***')
-# set up two columns for the inputs
-#col1, col2 = st.columns(2)
-
-# take genre list and place them into a dictionary (this is so recommendation algorithm still works properly)
-genre_dict = dict()
-
-    
 
 # let user choose the number of recommendations they want
-#recommendation_amount = col2.number_input('Choose the number of recommendations', min_value=1, max_value=10)
 recommendation_amount = st.number_input('Choose the number of recommendations', min_value=1, max_value=10)
 
 
 # if the user presses the get recommendation button, display the database of recommendations
 if st.button('Get recommendations'):
-    movie_dataframe = recommend_movie(seen_movies,genre_dict,movie_dict,recommendation_amount)
+    movie_dataframe = recommend_movie(st.session_state.seen_movies,st.session_state.favorite_genres,movie_dict,recommendation_amount)
     st.dataframe(movie_dataframe)
     
