@@ -6,7 +6,7 @@ import sqlite3
 
 # config
 pd.options.mode.chained_assignment = None  # default='warn'
-#st.set_page_config(initial_sidebar_state='collapsed')
+st.set_page_config(initial_sidebar_state='collapsed')
 
 #
 #
@@ -103,7 +103,7 @@ def get_movies_update_genres() -> None:
     return None
 
 # function to recommend n movies to the user based off of seen movies and fav genres
-def recommend_movie(seen_movies: set, favorite_genres: dict, movie_dict: dict, top_n: int) -> list:
+def recommend_movie(seen_movies: set, favorite_genres: dict, movie_dict: dict, top_n: int) -> pd.DataFrame:
     
     # sort the users top genres by using the number of genres and reversing it. And getting the top 3 genres
     # the lambda function is getting the pair of ('genre',count) and using the pair at index 1 to sort
@@ -176,7 +176,7 @@ if st.button('update'):
             
             for genre in movie_dict[movie][:-1]:
                 st.session_state.favorite_genres[genre] = st.session_state.favorite_genres.get(genre,0) + 1
-
+    selected_movies.clear()
 # closing the database connection
 conn.close()
 

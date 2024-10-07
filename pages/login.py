@@ -5,6 +5,8 @@ import sqlite3
 conn = sqlite3.connect('users.db',check_same_thread=False)
 cursor = conn.cursor()
 
+st.set_page_config(initial_sidebar_state='collapsed')
+
 st.title('LOGIN PAGE')
 
 # get the username and password from the user
