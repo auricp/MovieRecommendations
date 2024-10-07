@@ -1,0 +1,6 @@
+streamlit
+pandas
+json
+sqlite3
+streamlit_extras
+streamlit_extras.switch_page_button
